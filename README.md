@@ -12,32 +12,56 @@ A simple NixOS module that checks for channel updates and shows a desktop notifi
 
 ## Installation
 
-Add to your `/etc/nixos/configuration.nix`:
+### Option 1: Local Installation (Simple)
+
+Copy the module to a root-owned location:
+
+```bash
+sudo mkdir -p /etc/nixos/modules
+sudo cp /path/to/nixos-update-notify/module.nix /etc/nixos/modules/nixos-update-notify.nix
+sudo chown root:root /etc/nixos/modules/nixos-update-notify.nix
+```
+
+Then add to your `/etc/nixos/configuration.nix`:
 
 ```nix
 { config, pkgs, ... }:
 {
   imports = [
-    /path/to/nixos-update-notify/module.nix
+    ./modules/nixos-update-notify.nix
   ];
 
   services.nixos-update-notify = {
     enable = true;
-    channel = "nixos-unstable";  # Channel to monitor
-    time = "07:30";              # Time to check (HH:MM)
+    channel = "nixos-unstable";
+    time = "07:30";
   };
 }
 ```
 
-Then rebuild:
+### Option 2: Fetch from Git (Pinned)
 
-```bash
-sudo nixos-rebuild switch
+Fetch directly from a git repository with a pinned commit:
+
+```nix
+{ config, pkgs, ... }:
+{
+  imports = [
+    "${builtins.fetchGit {
+      url = "https://github.com/YOURUSER/nixos-update-notify.git";
+      rev = "COMMIT_SHA_HERE";  # Pin to specific commit for security
+    }}/module.nix"
+  ];
+
+  services.nixos-update-notify = {
+    enable = true;
+    channel = "nixos-unstable";
+    time = "07:30";
+  };
+}
 ```
 
-### Using Flakes
-
-If you use flakes, add to your `flake.nix`:
+### Option 3: Using Flakes
 
 ```nix
 {
@@ -52,6 +76,12 @@ If you use flakes, add to your `flake.nix`:
     };
   };
 }
+```
+
+Then rebuild:
+
+```bash
+sudo nixos-rebuild switch
 ```
 
 ## Options
