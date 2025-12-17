@@ -49,7 +49,7 @@ Fetch directly from a git repository with a pinned commit:
   imports = [
     "${builtins.fetchGit {
       url = "https://github.com/erichelgeson/nixos-update-notify.git";
-      rev = "COMMIT_SHA_HERE";  # Pin to specific commit for security
+      rev = "0357ccc2a344e9f14f27fcc1fdb35df8b930c02b";  # Pin to specific commit for security
     }}/module.nix"
   ];
 
