@@ -1,0 +1,18 @@
+{
+    "KPlugin": {
+        "Id": "nixos-backend",
+        "Name": "NixOS Backend",
+        "Description": "Shows NixOS system updates from channel",
+        "Icon": "nix-snowflake",
+        "Authors": [
+            {
+                "Name": "NixOS Update Notify",
+                "Email": "noreply@example.com"
+            }
+        ],
+        "Category": "System",
+        "EnabledByDefault": true,
+        "License": "MIT",
+        "Version": "1.0"
+    }
+}

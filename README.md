@@ -34,7 +34,6 @@ Then add to your `/etc/nixos/configuration.nix`:
   services.nixos-update-notify = {
     enable = true;
     channel = "nixos-unstable";
-    time = "07:30";
   };
 }
 ```
@@ -56,7 +55,6 @@ Fetch directly from a git repository with a pinned commit:
   services.nixos-update-notify = {
     enable = true;
     channel = "nixos-unstable";
-    time = "07:30";
   };
 }
 ```
@@ -90,7 +88,9 @@ sudo nixos-rebuild switch
 |--------|------|---------|-------------|
 | `enable` | bool | `false` | Enable the update notifier |
 | `channel` | string | `"nixos-unstable"` | NixOS channel to monitor |
-| `time` | string | `"07:30"` | Time to check for updates (HH:MM) |
+| `startHour` | int | `7` | Hour to start checking (0-23) |
+| `endHour` | int | `22` | Hour to stop checking (0-23) |
+| `minute` | int | `30` | Minute of each hour to check (0-59) |
 
 ### Available Channels
 
@@ -118,4 +118,63 @@ View logs:
 
 ```bash
 journalctl --user -u nixos-update-notify.service
+```
+
+## KDE Discover Backend (Experimental)
+
+This project also includes an experimental KDE Discover backend that shows NixOS updates directly in the Discover application.
+
+### Installation
+
+Using flakes, add the discover-backend module:
+
+```nix
+{
+  inputs.nixos-update-notify.url = "github:YOURUSER/nixos-update-notify";
+
+  outputs = { nixpkgs, nixos-update-notify, ... }: {
+    nixosConfigurations.HOSTNAME = nixpkgs.lib.nixosSystem {
+      modules = [
+        nixos-update-notify.nixosModules.discover-backend
+        ./configuration.nix
+      ];
+    };
+  };
+}
+```
+
+Then enable it:
+
+```nix
+{
+  services.nixos-discover-backend = {
+    enable = true;
+    channel = "nixos-unstable";
+  };
+}
+```
+
+### How it Works
+
+The backend queries the same Prometheus API and displays a "NixOS System" update in Discover when your system revision differs from the channel. It does not perform the update itself - you still need to run `sudo nixos-rebuild switch` manually.
+
+### Development
+
+Enter the development shell:
+
+```bash
+nix develop  # or: nix-shell
+```
+
+Build the backend:
+
+```bash
+cmake -B build -G Ninja
+cmake --build build
+```
+
+Test with Discover:
+
+```bash
+QT_PLUGIN_PATH=$PWD/build plasma-discover
 ```
