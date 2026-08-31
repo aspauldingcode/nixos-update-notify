@@ -1,9 +1,12 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, options, ... }:
 
 let
   cfg = config.services.nixos-update-notify;
-  isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
-  isLinux = pkgs.stdenv.hostPlatform.isLinux;
+  # Avoid `pkgs.stdenv` at module-eval time (infinite recursion on nix-darwin
+  # when this module is imported alongside `nixpkgs.hostPlatform`). Branch on
+  # which service manager options exist instead.
+  isDarwin = options ? launchd;
+  isLinux = options ? systemd;
 
   checkUpdateScript = pkgs.writeShellApplication {
     name = "nixos-update-notify";
@@ -30,11 +33,14 @@ in
     channel = lib.mkOption {
       type = lib.types.str;
       default = if isDarwin then "nixpkgs-unstable" else "nixos-unstable";
-      defaultText = lib.literalExpression ''if pkgs.stdenv.hostPlatform.isDarwin then "nixpkgs-unstable" else "nixos-unstable"'';
+      defaultText = lib.literalExpression ''if options ? launchd then "nixpkgs-unstable" else "nixos-unstable"'';
       description = ''
         Channel to monitor via the NixOS Prometheus `channel_revision` metric.
         Darwin hosts typically want `nixpkgs-unstable` or `nixpkgs-26.05-darwin`;
         NixOS hosts typically want `nixos-unstable` or `nixos-26.05`.
+        Match this to the nixpkgs input your system actually follows — a
+        nix-darwin host on `nixos-26.05` should set `channel = "nixos-26.05"`,
+        not `nixpkgs-26.05-darwin`.
       '';
       example = "nixos-26.05";
     };
@@ -92,6 +98,7 @@ in
       launchd.user.agents.nixos-update-notify = {
         command = "${checkUpdateScript}/bin/nixos-update-notify";
         serviceConfig = {
+          Label = "org.nixos.nixos-update-notify";
           RunAtLoad = true;
           StartCalendarInterval = map (h: {
             Hour = h;
