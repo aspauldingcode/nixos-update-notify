@@ -1,5 +1,5 @@
 {
-  description = "NixOS update notifier - shows a notification when channel updates are available";
+  description = "NixOS / nix-darwin update notifier - desktop notification when channel updates are available";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -7,14 +7,16 @@
 
   outputs = { self, nixpkgs, ... }:
   let
-    supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
-    forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+    linuxSystems = [ "x86_64-linux" "aarch64-linux" ];
+    forLinuxSystems = nixpkgs.lib.genAttrs linuxSystems;
   in {
-    # Existing notification module
     nixosModules.default = import ./module.nix;
     nixosModules.nixos-update-notify = import ./module.nix;
 
-    # KDE Discover backend module
+    darwinModules.default = import ./module.nix;
+    darwinModules.nixos-update-notify = import ./module.nix;
+
+    # KDE Discover backend module (Linux only)
     nixosModules.discover-backend = { config, lib, pkgs, ... }: {
       options.services.nixos-discover-backend = {
         enable = lib.mkEnableOption "NixOS Discover backend";
@@ -30,15 +32,13 @@
         environment.systemPackages = [
           self.packages.${pkgs.system}.discover-backend
         ];
-        # Ensure plugin is found by Discover
         environment.sessionVariables.QT_PLUGIN_PATH = [
           "${self.packages.${pkgs.system}.discover-backend}/lib/qt-6/plugins"
         ];
       };
     };
 
-    # Packages
-    packages = forAllSystems (system:
+    packages = forLinuxSystems (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
       in {
@@ -47,8 +47,7 @@
       }
     );
 
-    # Development shells
-    devShells = forAllSystems (system:
+    devShells = forLinuxSystems (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
       in {

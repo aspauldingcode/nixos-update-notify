@@ -2,63 +2,41 @@
 
 let
   cfg = config.services.nixos-update-notify;
+  isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
+  isLinux = pkgs.stdenv.hostPlatform.isLinux;
 
   checkUpdateScript = pkgs.writeShellApplication {
     name = "nixos-update-notify";
-    runtimeInputs = with pkgs; [ curl jq libnotify ];
+    runtimeInputs =
+      with pkgs;
+      [
+        curl
+        jq
+      ]
+      ++ lib.optionals isLinux [ libnotify ]
+      ++ lib.optionals isDarwin [ terminal-notifier ];
     text = ''
       CHANNEL="${cfg.channel}"
-      API_URL="https://prometheus.nixos.org/api/v1/query?query=channel_revision"
-      STATE_DIR="''${XDG_STATE_HOME:-$HOME/.local/state}/nixos-update-notify"
-      STATE_FILE="$STATE_DIR/last-notified-revision"
-
-      # Fetch remote revision from Prometheus API
-      REMOTE=$(curl -sf "$API_URL" | \
-        jq -r ".data.result[] | select(.metric.channel==\"$CHANNEL\") | .metric.revision")
-
-      if [ -z "$REMOTE" ]; then
-        echo "Error: Could not fetch revision for channel '$CHANNEL'" >&2
-        exit 1
-      fi
-
-      # Get local system revision
-      LOCAL=$(/run/current-system/sw/bin/nixos-version --revision)
-
-      # If system is up to date, clear state and exit
-      if [ "$REMOTE" = "$LOCAL" ]; then
-        rm -f "$STATE_FILE"
-        exit 0
-      fi
-
-      # Check if we already notified about this revision
-      LAST_NOTIFIED=""
-      if [ -f "$STATE_FILE" ]; then
-        LAST_NOTIFIED=$(cat "$STATE_FILE")
-      fi
-
-      if [ "$REMOTE" = "$LAST_NOTIFIED" ]; then
-        # Already notified about this revision
-        exit 0
-      fi
-
-      # New update available - send notification and record it
-      mkdir -p "$STATE_DIR"
-      notify-send --urgency=critical \
-        "NixOS Update Available" \
-        "New $CHANNEL update: ''${REMOTE:0:8}..."
-      printf '%s' "$REMOTE" > "$STATE_FILE"
+      ${builtins.readFile ./check-update.sh}
     '';
   };
+
+  calendarHours = lib.range cfg.startHour cfg.endHour;
 in
 {
   options.services.nixos-update-notify = {
-    enable = lib.mkEnableOption "NixOS update notifier";
+    enable = lib.mkEnableOption "NixOS / nix-darwin update notifier";
 
     channel = lib.mkOption {
       type = lib.types.str;
-      default = "nixos-unstable";
-      description = "The NixOS channel to monitor for updates.";
-      example = "nixos-25.11";
+      default = if isDarwin then "nixpkgs-unstable" else "nixos-unstable";
+      defaultText = lib.literalExpression ''if pkgs.stdenv.hostPlatform.isDarwin then "nixpkgs-unstable" else "nixos-unstable"'';
+      description = ''
+        Channel to monitor via the NixOS Prometheus `channel_revision` metric.
+        Darwin hosts typically want `nixpkgs-unstable` or `nixpkgs-26.05-darwin`;
+        NixOS hosts typically want `nixos-unstable` or `nixos-26.05`.
+      '';
+      example = "nixos-26.05";
     };
 
     startHour = lib.mkOption {
@@ -83,22 +61,46 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    systemd.user.services.nixos-update-notify = {
-      description = "Check for NixOS channel updates";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${checkUpdateScript}/bin/nixos-update-notify";
+  config = lib.mkIf cfg.enable (
+    {
+      assertions = [
+        {
+          assertion = isLinux || isDarwin;
+          message = "services.nixos-update-notify is supported on NixOS and nix-darwin only.";
+        }
+      ];
+    }
+    // lib.optionalAttrs isLinux {
+      systemd.user.services.nixos-update-notify = {
+        description = "Check for NixOS channel updates";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${checkUpdateScript}/bin/nixos-update-notify";
+        };
       };
-    };
 
-    systemd.user.timers.nixos-update-notify = {
-      description = "Hourly NixOS update check";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = "*-*-* ${toString cfg.startHour}..${toString cfg.endHour}:${toString cfg.minute}:00";
-        Persistent = true;
+      systemd.user.timers.nixos-update-notify = {
+        description = "Hourly NixOS update check";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnCalendar = "*-*-* ${toString cfg.startHour}..${toString cfg.endHour}:${toString cfg.minute}:00";
+          Persistent = true;
+        };
       };
-    };
-  };
+    }
+    // lib.optionalAttrs isDarwin {
+      launchd.user.agents.nixos-update-notify = {
+        command = "${checkUpdateScript}/bin/nixos-update-notify";
+        serviceConfig = {
+          RunAtLoad = true;
+          StartCalendarInterval = map (h: {
+            Hour = h;
+            Minute = cfg.minute;
+          }) calendarHours;
+          StandardOutPath = "/tmp/nixos-update-notify.log";
+          StandardErrorPath = "/tmp/nixos-update-notify.err.log";
+        };
+      };
+    }
+  );
 }

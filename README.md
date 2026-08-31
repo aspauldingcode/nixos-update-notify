@@ -1,14 +1,17 @@
 # nixos-update-notify
 
-A simple NixOS module that checks for channel updates and shows a desktop notification when updates are available.
+A NixOS **and nix-darwin** module that checks for channel updates and shows a
+desktop notification when updates are available.
 
 ## Features
 
 - Checks the NixOS Prometheus API for the latest channel revision
-- Compares against your running system's revision
+- Compares against your running system's nixpkgs revision
+  (`nixos-version --revision` on NixOS, `darwin-version.json` on macOS)
 - Shows a persistent critical notification when updates are available
+  (`notify-send` on Linux, `terminal-notifier` on macOS)
 - Configurable channel and check time
-- Runs as a systemd user timer
+- Runs as a systemd user timer (NixOS) or a launchd user agent (nix-darwin)
 
 ## Installation
 
@@ -61,9 +64,11 @@ Fetch directly from a git repository with a pinned commit:
 
 ### Option 3: Using Flakes
 
+NixOS:
+
 ```nix
 {
-  inputs.nixos-update-notify.url = "github:YOURUSER/nixos-update-notify";
+  inputs.nixos-update-notify.url = "github:erichelgeson/nixos-update-notify";
 
   outputs = { nixpkgs, nixos-update-notify, ... }: {
     nixosConfigurations.HOSTNAME = nixpkgs.lib.nixosSystem {
@@ -76,10 +81,28 @@ Fetch directly from a git repository with a pinned commit:
 }
 ```
 
+nix-darwin:
+
+```nix
+{
+  inputs.nixos-update-notify.url = "github:erichelgeson/nixos-update-notify";
+
+  outputs = { nix-darwin, nixos-update-notify, ... }: {
+    darwinConfigurations.HOSTNAME = nix-darwin.lib.darwinSystem {
+      modules = [
+        nixos-update-notify.darwinModules.default
+        ./configuration.nix
+      ];
+    };
+  };
+}
+```
+
 Then rebuild:
 
 ```bash
-sudo nixos-rebuild switch
+sudo nixos-rebuild switch          # NixOS
+sudo darwin-rebuild switch         # nix-darwin (or: nh darwin switch)
 ```
 
 ## Options
@@ -87,7 +110,7 @@ sudo nixos-rebuild switch
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enable` | bool | `false` | Enable the update notifier |
-| `channel` | string | `"nixos-unstable"` | NixOS channel to monitor |
+| `channel` | string | `nixos-unstable` (Linux) / `nixpkgs-unstable` (Darwin) | Channel to monitor |
 | `startHour` | int | `7` | Hour to start checking (0-23) |
 | `endHour` | int | `22` | Hour to stop checking (0-23) |
 | `minute` | int | `30` | Minute of each hour to check (0-59) |
@@ -96,11 +119,16 @@ sudo nixos-rebuild switch
 
 - `nixos-unstable`
 - `nixos-unstable-small`
+- `nixos-26.05`
+- `nixos-26.05-small`
 - `nixos-25.11`
 - `nixos-25.11-small`
 - `nixpkgs-unstable`
+- `nixpkgs-26.05-darwin`
 
 ## Testing
+
+### NixOS
 
 Manually trigger a check:
 
@@ -118,6 +146,20 @@ View logs:
 
 ```bash
 journalctl --user -u nixos-update-notify.service
+```
+
+### nix-darwin
+
+Manually trigger a check (agent label is `org.nixos.nixos-update-notify`):
+
+```bash
+launchctl kickstart -k "gui/$(id -u)/org.nixos.nixos-update-notify"
+```
+
+View logs:
+
+```bash
+tail -f /tmp/nixos-update-notify.log /tmp/nixos-update-notify.err.log
 ```
 
 ## KDE Discover Backend (Experimental)
